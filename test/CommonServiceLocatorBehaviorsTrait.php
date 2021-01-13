@@ -11,6 +11,7 @@ declare(strict_types=1);
 namespace LaminasTest\ServiceManager;
 
 use DateTime;
+use DateTimeZone;
 use Interop\Container\ContainerInterface;
 use Interop\Container\Exception\ContainerException;
 use Laminas\ServiceManager\Exception\ContainerModificationsNotAllowedException;
@@ -337,6 +338,67 @@ trait CommonServiceLocatorBehaviorsTrait
         $secondFactory->expects($this->once())->method('__invoke');
 
         $newServiceManager->get(DateTime::class);
+    }
+
+    public function testConfigureCanOverrideAliasesWithFactories()
+    {
+        $firstFactory  = $this->getMockBuilder(FactoryInterface::class)
+            ->getMock();
+        $secondFactory = $this->getMockBuilder(FactoryInterface::class)
+            ->getMock();
+        $thirdFactory  = $this->getMockBuilder(FactoryInterface::class)
+            ->getMock();
+
+        $serviceManager = $this->createContainer([
+            'invokables' => [
+                'alias1' => DateTime::class,
+            ],
+            'factories' => [
+                DateTimeZone::class => $firstFactory,
+            ],
+            'aliases' => [
+                'alias2' => DateTimeZone::class,
+            ],
+        ]);
+
+        $newServiceManager = $serviceManager->configure([
+            'factories' => [
+                'alias1' => $secondFactory,
+                'alias2' => $thirdFactory,
+            ],
+        ]);
+
+        $this->assertSame($serviceManager, $newServiceManager);
+
+        $firstFactory->expects($this->never())->method('__invoke');
+        $secondFactory->expects($this->once())->method('__invoke');
+        $thirdFactory->expects($this->once())->method('__invoke');
+
+        $newServiceManager->get('alias1');
+        $newServiceManager->get('alias2');
+    }
+
+    public function testConfigureInvokablesTakePrecedenceOverFactories()
+    {
+        $firstFactory  = $this->getMockBuilder(FactoryInterface::class)
+            ->getMock();
+
+        $serviceManager = $this->createContainer([
+            'aliases' => [
+                'custom_alias' => DateTime::class,
+            ],
+            'factories' => [
+                DateTime::class => $firstFactory,
+            ],
+            'invokables' => [
+                'custom_alias' => stdClass::class,
+            ],
+        ]);
+
+        $firstFactory->expects($this->never())->method('__invoke');
+
+        $object = $serviceManager->get('custom_alias');
+        $this->assertInstanceOf(stdClass::class, $object);
     }
 
     /**

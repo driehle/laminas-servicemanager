@@ -357,11 +357,19 @@ class ServiceManager implements ServiceLocatorInterface
         }
 
         if (isset($config['invokables']) && ! empty($config['invokables'])) {
-            $this->createAliasesAndFactoriesForInvokables($config['invokables']);
+            $newAliases = $this->createAliasesAndFactoriesForInvokables($config['invokables']);
+            // override existing aliases with those created by invokables to ensure
+            // that they are still present after merging aliases later on
+            $config['aliases'] = $newAliases + ($config['aliases'] ?? []);
         }
 
         if (isset($config['factories'])) {
             $this->factories = $config['factories'] + $this->factories;
+            foreach ($config['factories'] as $name => $factory) {
+                if (isset($this->aliases[$name])) {
+                    unset($this->aliases[$name]);
+                }
+            }
         }
 
         if (isset($config['delegators'])) {
@@ -777,14 +785,19 @@ class ServiceManager implements ServiceLocatorInterface
      * creates an alias to the class (which will later be mapped as an
      * invokable factory).
      */
-    private function createAliasesAndFactoriesForInvokables(array $invokables): void
+    private function createAliasesAndFactoriesForInvokables(array $invokables): array
     {
+        $newAliases = [];
+
         foreach ($invokables as $name => $class) {
             $this->factories[$class] = Factory\InvokableFactory::class;
             if ($name !== $class) {
                 $this->aliases[$name] = $class;
+                $newAliases[$name] = $class;
             }
         }
+
+        return $newAliases;
     }
 
     /**
